@@ -1,0 +1,296 @@
+<% include layout/header.html %>
+
+	 <div class="container">
+      <div class="row row-offcanvas row-offcanvas-right">
+        <div class="col-xs-12 col-sm-9">
+          <div id="map-canvas" style="height: 500px; width: 100%"></div>
+        </div>
+        <div class="col-xs-6 col-sm-3 sidebar-offcanvas" id="sidebar" role="navigation">
+          <div class="list-group">
+            <a href="#" class="list-group-item">
+              <span id="tick_num"></span>
+            </a>
+            <a href="#" class="list-group-item">用户数：
+              <span id="user_num_offset"></span>
+              <span class="fr" id="user_num"></span>
+            </a>
+            <a href="#" class="list-group-item">系统POI数量：
+              <span class="fr" id="sys_poi_num"></span>
+            </a>
+            <a href="#" class="list-group-item">用户POI数量：
+              <span class="fr" id="user_poi_num"></span>
+            </a>
+            <a href="/subject/manage" class="list-group-item">发起话题数：
+              <span class="fr" id="subject_num"></span>
+            </a>
+            <a href="#" class="list-group-item">回复数：
+              <span class="fr"  id="response_num"></span>
+            </a>
+          </div>
+        </div><!--/span-->
+      </div><!--/row-->
+    </div><!--/.container-->
+
+    <script src="http://maps.google.cn/maps/api/js?v=3.exp&sensor=false&key=AIzaSyDBTJwu2gMQPwtgRa_KxUFgyIrKmZdnijc" type="text/javascript"></script>
+
+
+    <script>
+      window.map = {};
+      window.map.inspect = {
+          data:{
+              map : null,
+              marker : null, // 当前位置
+              geocoder : new google.maps.Geocoder(),
+              latlng : null,
+              flag : false,
+              markersArray : [],
+              infowindowsArray : [],
+          },
+          init : function(lat, lon){
+              
+              this.data.latlng = new google.maps.LatLng(lat, lon);
+              this.locate(this.data.latlng);
+          },
+          
+          locate : function(latlng){
+              var mapOptions = {
+                  zoom: 2,
+                  mapTypeControl: false,
+                  navigationControlOptions: {style: google.maps.NavigationControlStyle.SMALL},
+                  mapTypeId: google.maps.MapTypeId.ROADMAP
+              }
+              this.data.map = new google.maps.Map(document.getElementById('map-canvas'), mapOptions);
+              this.data.map.setCenter(latlng);
+              /*
+              this.data.marker = new google.maps.Marker({
+                 map: this.data.map,
+                 position: latlng,
+                 draggable: true,
+                 //icon : '/static/image/map/marker_green.png',
+                 title : 'Center',
+              });
+              */
+          },
+
+          load_search_data: function(name, email, phone){
+              //$.showLoading();
+              
+              $.get('/business/search/list',
+                  {
+                      'city_id': this.data.city_id,
+                      'name': name,
+                      'email': email,
+                      'phone': phone,
+                      '_xsrf':$('input[name="_xsrf"]').val()
+                  },
+                  function(data){
+                      if(data.exception.code==0){
+                          //$.hideLoading();
+                          console.log('business list size:'+data.data.length);
+                          this.load_search_list(data.data);
+                          this.load_markers(data.data);
+                      }else{
+                          //$.hideLoading();
+                          console.log('error');
+                          notifier.error({
+                              message:data.exception.error,
+                              position: 'center',
+                          });
+                      }
+                  }
+              ,'json');
+          },
+
+          load_data: function(){
+              //$.showLoading();
+              
+              $.get('/business/prefer/list',
+                  {
+                      'city_id': this.data.city_id,
+                      '_xsrf':$('input[name="_xsrf"]').val()
+                  },
+                  function(data){
+                      if(data.exception.code==0){
+                          //$.hideLoading();
+                          console.log('business list size:'+data.data.length);
+                          this.load_search_list(data.data);
+                          this.load_markers(data.data);
+                      }else{
+                          //$.hideLoading();
+                          console.log('error');
+                          notifier.error({
+                              message:data.exception.error,
+                              position: 'center',
+                          });
+                      }
+                  }
+              ,'json');
+          },
+          addMarker : function(latlng, business) {
+              var icon = "{{handler._context.dm_static}}/op_web/image/map/marker_green.png";
+              if(business['has_sale_log']==1){
+                  icon = "{{handler._context.dm_static}}/op_web/image/map/marker_red.png";
+              }
+              var marker = new google.maps.Marker({
+                 map: this.data.map,
+                 position: latlng,
+                 icon : icon,
+                 title: business['name'],
+              });
+              var claim = '';
+              if(business['has_sale_log']==0){
+                  claim = '<button data-uuid="'+business['uuid']+'" data-name="'+business['name']+'" class="lock_btn btn btn-sm btn-success ml5">{{_("Lock")}}</button>';
+              }
+              var content_info = [
+                  '<div class="map-info">',
+                      '<div class="mi_foot">',
+                          '<a class="btn btn-sm btn-default" href="{{handler._context.dm_u_web}}/restaurant/show/'+business['uuid']+'" target="_blank">{{_("Show")}}</a>',
+                          claim,
+                       '</div>',
+                       '<div class="mi-title">'+business['name']+'</div>',
+                       '<div><label>{{_("Address")}}：</label>'+business['address']+'</div>',
+                       '<div><label>{{_("Phone")}}：</label>'+business['phone']+'/'+business['mobile']+'</div>',
+                  '</div>'
+              ].join('');
+              
+              var infowindow = new google.maps.InfoWindow({
+                  content: content_info
+              });
+              
+              google.maps.event.addListener(marker, 'click', function() {
+                  for (i in this.data.infowindowsArray) {
+                      this.data.infowindowsArray[i].close(this.data.map,marker);
+                  }
+                  infowindow.open(this.data.map,marker);
+              });
+              
+              this.data.markersArray.push(marker);
+              this.data.infowindowsArray.push(infowindow);
+          },
+          // Removes the overlays from the map, but keeps them in the array
+          clearOverlays : function clearOverlays() {
+              if (this.data.markersArray) {
+                for (i in this.data.markersArray) {
+                  this.data.markersArray[i].setMap(null);
+                }
+              }
+          },
+          // Shows any overlays currently in the array
+          showOverlays : function() {
+              console.log('marker_len:'+this.data.markersArray.length);
+              if (this.data.markersArray) {
+                for (i in this.data.markersArray) {
+                  this.data.markersArray[i].setMap(this.data.map);
+                }
+              }
+          },
+          // Deletes all markers in the array by removing references to them
+          deleteOverlays : function() {
+              if (this.data.markersArray) {
+                  for (i in this.data.markersArray) {
+                      this.data.markersArray[i].setMap(null);
+                  }
+                  this.data.markersArray.length = 0;
+              }
+              
+              if (this.data.infowindowsArray) {
+                  this.data.infowindowsArray.length = 0;
+              }
+          },
+          load_markers : function(list){
+              //console.log(marker_array);
+              this.deleteOverlays();
+              for(i in list){
+                  var latlng = new google.maps.LatLng(list[i]['lat'], list[i]['lon']);
+                  this.addMarker(latlng, list[i]);
+              }
+              this.showOverlays();
+          },
+          show_marker : function(index){
+              
+              // 隐藏所有infowindow
+              for (i in this.data.infowindowsArray) {
+                  this.data.infowindowsArray[i].close(this.data.map,marker);
+              }
+              var marker = this.data.markersArray[index];
+              this.data.map.setCenter(marker.getPosition());
+              
+              this.data.infowindowsArray[index].open(this.data.map,marker);
+              
+          },
+          load_search_list : function(list){
+              $("#map-search-list").html('');
+              
+              var empty = ['<div class="alert alert-warning fade in">',
+                              '<button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button>',
+                              '<strong>{{_("No Business")}}</strong>',
+                          '</div>'].join('');
+                          
+              if(list.length==0){
+                  $("#map-search-list").append($(empty));
+              }
+              for(i in list){
+                  var html = [
+                      '<a href="#" data-index="'+i+'" class="list-group-item">',
+                          '<h4 class="list-group-item-heading">'+list[i].name+'</h4>',
+                          '<p class="list-group-item-text">'+list[i].address+'</p>',
+                      '</a>',
+                  ].join('');
+                  $("#map-search-list").append($(html));
+              }
+              
+          }
+          
+      };
+
+
+      window.map.inspect.init(30, 20);
+
+      var wait = 30; 
+
+      function sTimer(num) {
+       if(num==wait){ 
+          loadSysInfo();
+       } else 
+       { 
+        $("#tick_num").html("统计倒计时 "+(wait-num)+" 秒"); 
+       } 
+       
+      } 
+
+      function tick(){
+        var wait = 30; //设置秒数(单位秒) 
+        var secs = 0;          
+        for(var i=1;i<=wait;i++) 
+        { 
+         window.setTimeout("sTimer("+i+")",i*1000); 
+        } 
+      }
+
+      function loadSysInfo(){
+        $.get('/system/total', {},
+                function(data){
+                    if(data.code==0){
+                        //alert(data.data)
+                        $("#user_num").text(data.data.user_num.num);
+                        $("#user_poi_num").text(data.data.user_poi_num.num);
+                        $("#sys_poi_num").text(data.data.sys_poi_num.num);
+                        $("#subject_num").text(data.data.subject_num.num);
+                        $("#response_num").text(data.data.response_num.num);
+                        tick();
+                    }else{
+                        
+                    }
+                }
+            ,'json');
+      }
+
+      $(document).ready(function(){
+        //alert($.fn.jquery); //显示jquery版本号
+        loadSysInfo();
+        //setInterval(loadSysInfo, 10000);
+      });
+
+    </script>
+
+<% include layout/footer.html %>

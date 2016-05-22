@@ -1,0 +1,207 @@
+<% include ../layout/header.html %>
+
+
+    <!--upload-->
+    <link rel="stylesheet" href="/sns_op_web/plugin/upload/css/jquery.fileupload.css">
+    <script src="/sns_op_web/plugin/upload/js/vendor/jquery.ui.widget.js"></script>
+    <script src="/sns_op_web/plugin/upload/js/blueimp-gallary.min.js"></script>
+    <script src="/sns_op_web/plugin/upload/js/jquery.fileupload.js"></script>
+    <script src="/sns_op_web/plugin/upload/js/jquery.fileupload-process.js"></script>
+    <script src="/sns_op_web/plugin/upload/js/jquery.fileupload-validate.js"></script>
+
+     <div class="container">
+      <div class="row row-offcanvas row-offcanvas-right">
+        <div class="col-xs-12 col-sm-8">
+
+          <div class="clearfix">
+
+              <a href="#" class="thumbnail w80 inline-block fl">
+                <img src="<%= Sys.cont.IMG_HOST %>/<%= subject._uid.icon %>.jpg" alt="">
+              </a>
+
+              <span style="line-height: 80px" class="ml20"><%= subject._uid.realname[0] %> <%= subject._uid.realname[1] %> (<%= subject._uid.alias %>)
+              <span>
+
+          </div>
+          
+
+          <div class="jumbotron">
+            <p><%= subject.desc %></p>
+
+            <%if(subject.images && subject.images.length>0) {%>
+                <% subject.images.forEach(function(item, i){ %>
+                
+
+                <div class="image_list">
+                    <div class="pull-left thumbImageDiv m10">
+                      <div class="thumbImage img-thumbnail" style="background-image:url('<%= Sys.cont.IMG_HOST %>/<%=item%>_s.jpg');">
+                      </div>
+                    </div>
+                </div>
+
+                <% })%>
+            <%} else {%>
+               
+            <%}%>
+
+            <div class="clearfix"></div>
+
+          </div>
+
+
+
+          <div class="mt5">
+
+            <form class="form-horizontal" id="add_response_form">
+              <div class="form-group">
+                <label for="inputEmail3" class="col-sm-2 control-label" style="text-align: left">运营用户</label>
+                <div class="col-sm-10">
+                  <input type="text" class="form-control w200" name="uid" value="567ba567bb5946e01f892fc0" />
+
+                  <input type="hidden" name="sbjid" value="<%=subject._id%>" />
+                </div>
+              </div>
+
+              <div class="form-group">
+                <div class="col-sm-12">
+                  <textarea class="form-control" name="content" rows="3" placeholder="输入回复内容"></textarea>
+                </div>
+              </div>
+
+              <div class="form-group">
+
+                <div class="col-sm-2">
+                  <span class="btn btn-warning fileinput-button">
+                      <i class="glyphicon glyphicon-upload "></i>
+                      <span>上传图片</span>
+                      <input id="imageupload" class="fileupload" type="file" name="upload" multiple />
+                  </span>
+                </div>
+
+                <div class="col-sm-10">
+
+                  <div class="progress none mt10 ml20">
+                      <div class="progress-bar progress-bar-success"></div>
+                      <div class="progress-extended">&nbsp;</div>
+                  </div>
+
+                </div>
+                    
+              </div>
+
+
+              <div id="upload_image_list" class="row image_list" style="padding-left:15px">
+
+                
+              </div>
+              
+              <div class="mt5 fr">
+                <button type="submit" class="btn btn-success">添加回复</button>
+              </div>
+            </form>
+            
+          </div>
+
+  
+        </div>
+        <div class="col-xs-6 col-sm-4">
+          <h2>所有回复</h2>
+        </div><!--/span-->
+      </div><!--/row-->
+
+    </div><!--/.container-->
+
+
+    <!--Form Validator-->
+    <script src="/sns_op_web/plugin/form-validator/jquery.form-validator.min.js"></script>
+
+    <script src="http://maps.google.cn/maps/api/js?v=3.exp&sensor=false&key=AIzaSyDBTJwu2gMQPwtgRa_KxUFgyIrKmZdnijc" type="text/javascript"></script>
+
+    <script>
+
+
+        $("#imageupload").fileupload({
+            url: '<%= Sys.cont.IMG_UPLOAD_HOST %>/image/upload/common'
+        });
+        
+        var $progress = $('.progress');
+
+        function appendImages(images){
+
+            var images = JSON.parse(images);
+
+            $.each(images, function(i, uuid) {
+                     
+               var html = [
+                  '<div class="deleteImage pull-left thumbImageDiv m10">',
+                    '<div class="thumbImage img-thumbnail" style="background-image:url(\'<%= Sys.cont.IMG_HOST %>/'+ uuid +'_s.jpg\');">',
+                    '</div>',
+                    '<input type="hidden" name="image" value="'+ uuid +'" />',
+                  '</div>'].join('');
+
+               $("#upload_image_list").append(html)
+
+            });
+
+            $progress.addClass("none");
+
+            $progress.find('.progress-bar').css(
+                'width',
+                '0%'
+            );
+            
+        }
+
+        $("#imageupload").fileupload('option', {
+            maxFileSize: 20000000, // 20M
+            acceptFileTypes: /(\.|\/)(jpeg|jpg|gif|png)$/i,
+            dataType: 'json',
+            done: function (e, data) {
+                
+                images = data.result.data.uuids;
+                setTimeout("appendImages('"+JSON.stringify(images)+"')", 1000)
+                
+            },
+            progressall: function (e, data) {
+                $progress.removeClass("none");
+                var progress = parseInt(data.loaded / data.total * 100, 10);
+                $progress.find('.progress-bar').css(
+                    'width',
+                    progress + '%'
+                );
+            }
+        });
+
+
+        $(".image_list").delegate('.deleteImage', 'click', function(){
+            if(confirm("确定要删除此图片吗？")){
+              $(this).fadeOut().remove();
+            }
+        });
+
+
+        $.validate({
+            form : '#add_response_form',
+            onError : function() {
+                
+            },
+            onSuccess : function() {
+
+              $.post('/subject/response/add', $("#add_response_form").serialize(),
+                function(data){
+                  if(data.code==0){
+                    alert("添加成功");
+
+                    $("#upload_image_list").html("");
+                  }else{
+                    alert("添加失败");
+                  }
+                }
+              );
+
+              return false; // Will stop the submission of the form
+            }
+        });
+
+
+    </script>

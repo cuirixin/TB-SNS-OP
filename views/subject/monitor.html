@@ -1,0 +1,204 @@
+<% include ../layout/header.html %>
+
+	 <div class="container">
+      <div class="row row-offcanvas row-offcanvas-right">
+        <div class="col-xs-12 col-sm-8">
+          <div id="map-canvas" style="height: 400px; width: 100%"></div>
+          <div class="mt5">
+          	<textarea class="form-control" rows="3" placeholder="添加回复"></textarea>
+          </div>
+
+          <div class="mt5 fr">
+          	<button type="button" class="btn btn-success">添加回复</button>
+          	&nbsp;&nbsp;
+          	<button type="button" class="btn btn-info" id="refresh">刷新</button>
+          </div>
+
+        </div>
+        <div class="col-xs-6 col-sm-4 sidebar-offcanvas" id="sidebar" role="navigation">
+          <div class="list-group" id="subject_list">
+
+          </div>
+        </div><!--/span-->
+      </div><!--/row-->
+
+    </div><!--/.container-->
+
+    <script src="http://maps.google.cn/maps/api/js?v=3.exp&sensor=false&key=AIzaSyDBTJwu2gMQPwtgRa_KxUFgyIrKmZdnijc" type="text/javascript"></script>
+
+    <script>
+      window.map = {};
+      window.map.inspect = {
+          data:{
+              map : null,
+              marker : null, // 当前位置
+              geocoder : new google.maps.Geocoder(),
+              latlng : null,
+              flag : false,
+              markersDict : {},
+              infowindowsDict : {},
+              search_options: {
+                  's_type': 1,
+                  'limit': 10,
+                  's_direction': -1,
+                  'direction': -1,
+                  'start': Date.parse(new Date()) / 1000
+              }
+          },
+          init : function(lat, lon){
+              
+              this.data.latlng = new google.maps.LatLng(lat, lon);
+              this.locate(this.data.latlng);
+              this.load_search_data(true);
+          },
+          
+          locate : function(latlng){
+              var mapOptions = {
+                  zoom: 2,
+                  mapTypeControl: false,
+                  navigationControlOptions: {style: google.maps.NavigationControlStyle.SMALL},
+                  mapTypeId: google.maps.MapTypeId.ROADMAP
+              }
+              this.data.map = new google.maps.Map(document.getElementById('map-canvas'), mapOptions);
+              this.data.map.setCenter(latlng);
+          },
+
+          load_search_data: function(first){
+              //$.showLoading();
+              
+              $.get('/subject/recent',
+                  this.data.search_options,
+                  function(data){
+                      if(data.code==0){
+                          window.map.inspect.load_search_list(data.data.list);
+                          window.map.inspect.load_markers(data.data.list);
+                          if(first){
+                          	window.map.inspect.data.search_options.direction = 1
+                          }
+                      }else{
+                          alert("Load data error.");
+                      }
+                  }
+              ,'json');
+          },
+
+          addMarker : function(latlng, entity) {
+              var icon = "http://static.tubban.com/op_web/image/map/marker_green.png";
+              var marker = new google.maps.Marker({
+                 map: this.data.map,
+                 position: latlng,
+                 icon : icon,
+                 title: entity['desc'],
+              });
+              var claim = '';
+
+              var content_info = [
+                  '<div class="map-info">',
+                      '<p>' +entity.desc+ '</p>',
+                  '</div>'
+              ].join('');
+              
+              var infowindow = new google.maps.InfoWindow({
+                  content: content_info
+              });
+              
+              google.maps.event.addListener(marker, 'click', function() {
+                  for (i in window.map.inspect.data.infowindowsDict) {
+                  	console.log(i);
+                  	console.log(window.map.inspect.data.infowindowsDict[i]);
+                      window.map.inspect.data.infowindowsDict[i].close(window.map.inspect.data.map,marker);
+                  }
+                  infowindow.open(window.map.inspect.data.map, marker);
+              });
+              
+              this.data.markersDict[entity['_id']] = marker;
+              this.data.infowindowsDict[entity['_id']] = infowindow;
+
+          },
+          // Removes the overlays from the map, but keeps them in the array
+          clearOverlays : function clearOverlays() {
+              for (i in this.data.markersDict) {
+                  this.data.markersDict[i].setMap(null);
+              }
+          },
+          // Shows any overlays currently in the array
+          showOverlays : function() {
+
+          	  $.each(this.data.markersDict, function (k, v) {
+					v.setMap(window.map.inspect.data.map);
+			  });
+
+          },
+          // Deletes all markers in the array by removing references to them
+          deleteOverlays : function() {
+
+          	  $.each(this.data.markersDict, function (k, v) {
+				  v.setMap(null);
+			  });
+              
+              this.data.markersDict = {};
+              this.data.infowindowsDict = {};
+
+          },
+          load_markers : function(list){
+              //console.log(marker_array);
+              this.deleteOverlays();
+              for(i in list){
+                  var latlng = new google.maps.LatLng(list[i]['coordinate'][1], list[i]['coordinate'][0]);
+                  this.addMarker(latlng, list[i]);
+              }
+              this.showOverlays();
+          },
+          show_marker : function(_id){
+
+          	  var marker = this.data.markersDict[_id];
+          	  if(!marker){
+          	  	return;
+          	  }
+              
+              // 隐藏所有infowindow
+              $.each(this.data.infowindowsDict, function (k, v) {
+				  v.close(window.map.inspect.map,marker);
+			  });
+
+              
+              for (i in this.data.infowindowsDict) {
+                  this.data.infowindowsDict[i].close(this.data.map,marker);
+              }
+              
+              this.data.map.setCenter(marker.getPosition());
+              this.data.infowindowsDict[_id].open(this.data.map, marker);
+              
+          },
+          load_search_list : function(list){
+
+          	  for (var i = list.length - 1; i >= 0; i--) {
+
+        				var html = [
+        					'<a href="#" style="display:none" data-index="'+list[i]._id+'" class="list-group-item">',
+        					'<h4 class="list-group-item-heading">'+list[i].desc+'</h4>',
+        					'<p class="list-group-item-text">'+list[i].add_time+'</p>',
+        					'</a>',
+        				].join('');
+
+        				this.data.search_options.start = list[i].add_time;
+                $("#subject_list").prepend($(html));
+                $(html).fadeIn();
+          	  };    
+          }
+          
+      };
+
+
+      window.map.inspect.init(30, 20);
+
+      $("#refresh").on('click', function(){
+      	window.map.inspect.load_search_data();
+      });
+
+      $("#subject_list").delegate('.list-group-item', 'click', function(){
+      	var _id = $(this).data("index");
+      	window.map.inspect.show_marker(_id);
+      });
+
+    </script>
